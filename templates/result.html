@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Analysis Report - HeartShield</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        * { 
+            font-family: 'Inter', sans-serif; 
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(120, 200, 255, 0.2) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .floating-shapes {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .shape {
+            position: absolute;
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+            opacity: 0.1;
+        }
+
+        .shape:nth-child(1) {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(45deg, #ff6b6b, #feca57);
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .shape:nth-child(2) {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(45deg, #48dbfb, #0abde3);
+            top: 70%;
+            left: 80%;
+            animation-delay: 2s;
+        }
+
+        .shape:nth-child(3) {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(45deg, #ff9ff3, #f368e0);
+            top: 20%;
+            right: 20%;
+            animation-delay: 4s;
+        }
+
+        .shape:nth-child(4) {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(45deg, #54a0ff, #2e86de);
+            bottom: 10%;
+            left: 30%;
+            animation-delay: 1s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            33% { transform: translateY(-30px) rotate(120deg); }
+            66% { transform: translateY(10px) rotate(240deg); }
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+
+        .animated-card { 
+            opacity: 0; 
+            transform: translateY(20px); 
+            animation: fadeInUp 0.8s ease-out forwards; 
+        }
+        
+        @keyframes fadeInUp { 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        
+        .heart-beat { 
+            animation: heartbeat 1.5s ease-in-out infinite; 
+        }
+        
+        @keyframes heartbeat { 
+            0%, 14%, 28%, 42%, 70% { transform: scale(1); } 
+            7%, 21%, 35% { transform: scale(1.1); } 
+        }
+
+        nav {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .chat-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(45deg, #ef4444, #dc2626);
+            color: white;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .chat-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 12px 35px rgba(239, 68, 68, 0.6);
+        }
+        
+        .chat-window {
+            position: fixed;
+            bottom: 100px;
+            right: 30px;
+            width: 350px;
+            height: 400px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            display: none;
+            flex-direction: column;
+            z-index: 1001;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .chat-header {
+            background: linear-gradient(45deg, #ef4444, #dc2626);
+            color: white;
+            padding: 15px;
+            border-radius: 20px 20px 0 0;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .message {
+            padding: 8px 12px;
+            border-radius: 15px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        
+        .message.bot {
+            background: #f3f4f6;
+            color: #374151;
+            align-self: flex-start;
+        }
+        
+        .message.user {
+            background: #ef4444;
+            color: white;
+            align-self: flex-end;
+        }
+        
+        .chat-input-form {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #e5e7eb;
+            border-radius: 0 0 20px 20px;
+        }
+        
+        .chat-input-form input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 20px;
+            margin-right: 10px;
+            outline: none;
+        }
+        
+        .chat-input-form button {
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        body.dark-mode {
+            background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+        }
+
+        body.dark-mode::before {
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(66, 153, 225, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(167, 139, 250, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(34, 197, 94, 0.2) 0%, transparent 50%);
+        }
+
+        body.dark-mode nav {
+            background: rgba(45, 55, 72, 0.95);
+        }
+
+        body.dark-mode .glass-card { 
+            background: rgba(45, 55, 72, 0.95);
+            color: #e2e8f0; 
+        }
+        
+        body.dark-mode .text-gray-800, body.dark-mode h1, body.dark-mode h2, body.dark-mode h3 { 
+            color: #e2e8f0; 
+        }
+        
+        body.dark-mode .text-gray-600, body.dark-mode .text-gray-500, body.dark-mode p { 
+            color: #a0aec0; 
+        }
+
+        body.dark-mode .chat-window {
+            background: rgba(45, 55, 72, 0.95);
+        }
+    </style>
+</head>
+<body>
+    <div class="floating-shapes">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+
+    <nav class="shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 flex justify-between items-center h-20">
+            <a href="{{ url_for('dashboard') }}" class="flex items-center space-x-3 group">
+                <i class="fa-solid fa-heart-pulse text-red-500 text-3xl heart-beat group-hover:text-red-600"></i>
+                <span class="font-bold text-xl text-gray-800 group-hover:text-red-500">HeartShield</span>
+            </a>
+            <div class="flex items-center space-x-6">
+                <a href="{{ url_for('dashboard') }}" class="text-gray-600 hover:text-red-500 font-medium">Dashboard</a>
+                <button onclick="toggleTheme()" class="text-gray-600 hover:text-red-500 text-lg"><i class="fa-solid fa-circle-half-stroke"></i></button>
+                <div class="text-gray-600">Welcome, <span class="font-bold text-red-500">{{ current_user.fullName.split(' ')[0] }}</span></div>
+                <a href="{{ url_for('logout') }}" class="text-gray-600 hover:text-red-500"><i class="fa-solid fa-right-from-bracket text-lg"></i></a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="py-16 px-6">
+        <div id="reportContainer" class="max-w-7xl mx-auto">
+            <div class="text-center mb-12 animated-card">
+                <h1 class="text-5xl font-bold text-white mb-4 drop-shadow-lg">Risk Assessment Report</h1>
+                <p class="text-gray-200 text-lg">Generated on: {{ assessment.date.strftime('%B %d, %Y at %I:%M %p') }}</p>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-1 space-y-8">
+                    <div class="glass-card p-8 rounded-xl shadow-xl text-center animated-card">
+                        <h2 class="text-xl font-bold text-gray-600 mb-4">Overall Risk Score</h2>
+                        <p id="riskPercent" class="text-7xl font-black text-red-500 mb-2">0%</p>
+                        <p id="riskText" class="text-2xl font-bold text-gray-700">{{ assessment.riskText }}</p>
+                    </div>
+                    
+                    <div class="glass-card p-6 rounded-xl shadow-xl text-center animated-card" style="animation-delay: 100ms;">
+                        <h2 class="text-lg font-bold text-gray-600 mb-3">AI Confidence</h2>
+                        <p id="confidenceScore" class="text-5xl font-black text-purple-600">0%</p>
+                    </div>
+                    
+                    <div class="glass-card p-6 rounded-xl shadow-xl animated-card" style="animation-delay: 200ms;">
+                        <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Your Input Parameters</h2>
+                        <div class="space-y-2 text-sm text-gray-600">
+                            {% for key, value in inputs.items() %}
+                                <p><strong>{{ key|replace('_', ' ')|capitalize }}:</strong> 
+                                    {% if key == 'male' %}{{ 'Female' if value == '0' else 'Male' }}{% elif key in ['currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes'] %}{{ 'No' if value == '0' else 'Yes' }}{% else %}{{ value }}{% endif %}
+                                </p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="lg:col-span-2 space-y-8">
+                    <div class="glass-card p-8 rounded-xl shadow-xl animated-card" style="animation-delay: 300ms;">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fa-solid fa-lightbulb mr-3 text-yellow-500"></i>AI Health Insights</h2>
+                        <p class="text-gray-700 text-lg leading-relaxed">{{ insights_text|safe }}</p>
+                    </div>
+                    
+                    <div class="glass-card p-6 rounded-xl shadow-xl animated-card" style="animation-delay: 400ms;">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fa-solid fa-triangle-exclamation mr-3 text-orange-500"></i>Risk Factors</h2>
+                        <div class="space-y-4">
+                            {% for factor in risk_factors %}
+                            <div>
+                                <h3 class="font-bold text-gray-800">{{ factor.title }}</h3>
+                                <p class="text-gray-600 text-sm mt-1">{{ factor.description }}</p>
+                            </div>
+                            {% else %}
+                            <p class="text-green-600 font-medium">No significant risk factors identified!</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="glass-card p-6 rounded-xl shadow-xl animated-card" style="animation-delay: 500ms;">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fa-solid fa-shield-heart mr-3 text-green-500"></i>Recommendations</h2>
+                        <ul class="space-y-3 list-disc list-inside text-gray-700">
+                            {% for precaution in precautions %}
+                                <li>{{ precaution|safe }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center mt-12 animated-card" style="animation-delay: 600ms;">
+                <a href="{{ url_for('dashboard') }}" class="bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white px-8 py-4 rounded-full font-bold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all">Back to Dashboard</a>
+            </div>
+        </div>
+    </main>
+
+    <div class="chat-button" id="chat-button">
+        <i class="fa-solid fa-comment-dots"></i>
+    </div>
+    <div class="chat-window" id="chat-window">
+        <div class="chat-header">HeartShield Assistant</div>
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot">Hello! Ask me about your results.</div>
+        </div>
+        <form class="chat-input-form" id="chat-form">
+            <input type="text" id="chat-input" placeholder="Type a question...">
+            <button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
+        </form>
+    </div>
+
+    <script src="{{ url_for('static', filename='global.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            function animateValue(obj, start, end, duration) {
+                let startTimestamp = null;
+                const step = (timestamp) => {
+                    if (!startTimestamp) startTimestamp = timestamp;
+                    const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                    obj.innerHTML = Math.floor(progress * (end - start) + start) + '%';
+                    if (progress < 1) {
+                        window.requestAnimationFrame(step);
+                    }
+                };
+                window.requestAnimationFrame(step);
+            }
+            
+            const riskPercentElement = document.getElementById('riskPercent');
+            const confidenceElement = document.getElementById('confidenceScore');
+            const finalRisk = parseInt("{{ assessment.riskLevel }}");
+            const finalConfidence = parseFloat("{{ assessment.confidenceScore }}");
+
+            if (riskPercentElement && confidenceElement) {
+                animateValue(riskPercentElement, 0, finalRisk, 1500);
+                animateValue(confidenceElement, 0, finalConfidence, 1500);
+            }
+        });
+
+        // Enhanced chat functionality
+        const chatButton = document.getElementById('chat-button');
+        const chatWindow = document.getElementById('chat-window');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const chatMessages = document.getElementById('chat-messages');
+
+        if (chatButton && chatWindow) {
+            chatButton.addEventListener('click', function() {
+                chatWindow.style.display = chatWindow.style.display === 'flex' ? 'none' : 'flex';
+            });
+        }
+
+        if (chatForm) {
+            chatForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const message = chatInput.value.trim();
+                if (message) {
+                    const userMessage = document.createElement('div');
+                    userMessage.className = 'message user';
+                    userMessage.textContent = message;
+                    chatMessages.appendChild(userMessage);
+
+                    chatInput.value = '';
+
+                    fetch('/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ message: message })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        const botMessage = document.createElement('div');
+                        botMessage.className = 'message bot';
+                        botMessage.textContent = data.response;
+                        chatMessages.appendChild(botMessage);
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    })
+                    .catch(error => {
+                        const errorMessage = document.createElement('div');
+                        errorMessage.className = 'message bot';
+                        errorMessage.textContent = 'Sorry, I encountered an error. Please try again.';
+                        chatMessages.appendChild(errorMessage);
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    });
+
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            });
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('darkMode', isDark);
+        }
+
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.body.classList.add('dark-mode');
+        }
+    </script>
+</body>
+</html>

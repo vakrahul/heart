@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}HeartShield{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% block navbar %}{% endblock %}
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    {# --- CHATBOT HTML IS HERE --- #}
+    <div class="chat-button" id="chat-button">
+        <i class="fa-solid fa-comment-dots"></i>
+    </div>
+    <div class="chat-window" id="chat-window">
+        <div class="chat-header">HeartShield Assistant</div>
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot">Hello! Ask me a question.</div>
+        </div>
+        <form class="chat-input-form" id="chat-form">
+            <input type="text" id="chat-input" placeholder="Type your message...">
+            <button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
+        </form>
+    </div>
+    {# --- END OF CHATBOT HTML --- #}
+
+    <script src="{{ url_for('static', filename='global.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

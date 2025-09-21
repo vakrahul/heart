@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - HeartShield</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; box-sizing: border-box; }
+        *, *:before, *:after { box-sizing: inherit; }
+        body { font-family: Arial, sans-serif; background: #fff5f5; color: #333; }
+        .navbar { display: flex; justify-content: space-between; align-items: center; padding: 15px 40px; background: #fff; border-bottom: 1px solid #eee; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .navbar-left { display: flex; align-items: center; gap: 50px; }
+        .navbar-left h2 { display: flex; align-items: center; gap: 8px; color: #e63946; margin: 0; }
+        .navbar-links { display: flex; gap: 30px; }
+        .navbar-links a { text-decoration: none; color: #000000; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+        .navbar-right { display: flex; align-items: center; gap: 20px; }
+        .container { padding: 40px; max-width: 1400px; margin: 0 auto; }
+        .welcome-section { margin-bottom: 50px; }
+        h2.section-title { margin-top: 40px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-box { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .stat-box h3 { margin: 0 0 10px; font-size: 16px; color: #000000; display: flex; align-items: center; gap: 8px; }
+        .stat-box p { font-size: 2.2rem; font-weight: bold; margin: 0; }
+        .quick-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+        .action-card { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .action-card h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px 0; font-size: 1.1rem; }
+        .action-card .card-icon { font-size: 1.5rem; color: #e63946; }
+        .action-card a.btn { margin-top: 10px; padding: 10px 15px; border-radius: 6px; font-weight: bold; color: #fff; text-decoration: none; display: inline-block; }
+        .red-btn { background: #e63946; }
+        .blue-btn { background: #457b9d; }
+        .green-btn { background: #2a9d8f; }
+        .recent { margin-bottom: 40px; }
+        .recent-item { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .recent-badge { background: #ffe066; padding: 5px 10px; border-radius: 5px; font-weight: bold; }
+        .view-all { text-align: right; margin-bottom: 10px; }
+        .view-all a { text-decoration: none; color: #e63946; font-weight: bold; }
+        
+        /* --- UPDATED: New Health Tip Box Styles --- */
+        .health-tip {
+            margin-top: 40px;
+            background-color: #fee2e2; /* Light red for light theme */
+            color: #991b1b; /* Dark red text for light theme */
+            padding: 20px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-left: 5px solid #ef4444;
+        }
+        .health-tip .icon {
+            font-size: 2.5rem;
+        }
+        .health-tip-content p {
+            margin: 0;
+            line-height: 1.5;
+        }
+        /* Style for dark mode */
+        body.dark-mode .health-tip {
+            background-color: #450a0a; /* Dark, deep red for dark theme */
+            color: #fecaca; /* Light red text for dark theme */
+            border-left-color: #f87171;
+        }
+
+        /* Splash Screen Styles - ADDED */
+        .splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: linear-gradient(135deg, #e63946 0%, #dc2626 50%, #b91c1c 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 1;
+            transition: opacity 0.8s ease-out;
+        }
+
+        .splash-screen.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .splash-heart {
+            font-size: 4rem;
+            color: white;
+            margin-bottom: 30px;
+            animation: heartbeat 2s ease-in-out infinite;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+
+        .splash-welcome {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .splash-welcome h1 {
+            font-size: 3rem;
+            margin: 0 0 10px 0;
+            opacity: 0;
+            animation: slideInUp 1s ease-out 0.5s forwards;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .splash-welcome p {
+            font-size: 1.2rem;
+            margin: 0;
+            opacity: 0;
+            animation: slideInUp 1s ease-out 1s forwards;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        .splash-tagline {
+            color: rgba(255,255,255,0.9);
+            font-size: 1rem;
+            margin-top: 30px;
+            opacity: 0;
+            animation: slideInUp 1s ease-out 1.5s forwards;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 500;
+        }
+
+        .loading-dots {
+            display: flex;
+            gap: 8px;
+            margin-top: 40px;
+        }
+
+        .loading-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: rgba(255,255,255,0.7);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .loading-dot:nth-child(1) { animation-delay: 0s; }
+        .loading-dot:nth-child(2) { animation-delay: 0.3s; }
+        .loading-dot:nth-child(3) { animation-delay: 0.6s; }
+
+        .main-content {
+            opacity: 0;
+            animation: fadeInContent 1s ease-out 3s forwards;
+        }
+
+        @keyframes heartbeat {
+            0%, 20%, 40%, 60%, 80%, 100% {
+                transform: scale(1) rotate(0deg);
+            }
+            10% {
+                transform: scale(1.1) rotate(-2deg);
+            }
+            30% {
+                transform: scale(1.15) rotate(2deg);
+            }
+            50% {
+                transform: scale(1.05) rotate(-1deg);
+            }
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.4;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.2);
+            }
+        }
+
+        @keyframes fadeInContent {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Splash Screen - ADDED -->
+    <div class="splash-screen" id="splash-screen">
+        <div class="splash-heart">
+            <i class="fa-solid fa-heart"></i>
+        </div>
+        <div class="splash-welcome">
+            <h1>Welcome, {{ current_user.fullName.split(' ')[0] }}!</h1>
+            <p>Your Heart Health Journey Continues</p>
+        </div>
+        <div class="splash-tagline">
+            HeartShield - Protecting What Matters Most
+        </div>
+        <div class="loading-dots">
+            <div class="loading-dot"></div>
+            <div class="loading-dot"></div>
+            <div class="loading-dot"></div>
+        </div>
+    </div>
+
+    <!-- Main Content - WRAPPED -->
+    <div class="main-content">
+        {# The splash screen logic can be placed here if you want it #}
+        
+        <div class="navbar">
+            <div class="navbar-left">
+                <h2><i class="fa-solid fa-heart"></i> HeartShield</h2>
+                <div class="navbar-links">
+                    <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-chart-line"></i> Dashboard</a>
+                    <a href="{{ url_for('assessment') }}"><i class="fa-solid fa-file-medical"></i> New Assessment</a>
+                    <a href="{{ url_for('profile') }}"><i class="fa-solid fa-user"></i> Profile</a>
+                </div>
+            </div>
+            <div class="navbar-right">
+                <button onclick="toggleTheme()"><i class="fa-solid fa-circle-half-stroke"></i></button>
+                <span>Welcome, <b>{{ current_user.fullName.split(' ')[0] }}</b></span>
+                <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-bracket"></i></a>
+            </div>
+        </div>
+        <div class="container">
+            <div class="welcome-section">
+                <h1>Welcome back, {{ current_user.fullName.split(' ')[0] }} 👋</h1>
+                <p>Your comprehensive heart health monitoring dashboard.</p>
+            </div>
+            <div class="stats">
+                <div class="stat-box">
+                    <h3><i class="fa-solid fa-chart-line"></i> Total Assessments</h3>
+                    <p>{{ assessments|length }}</p>
+                </div>
+                <div class="stat-box">
+                    <h3><i class="fa-solid fa-calendar-days"></i> This Month</h3>
+                    <p>{{ monthly_assessments }}</p>
+                </div>
+                <div class="stat-box">
+                    <h3><i class="fa-solid fa-clock-rotate-left"></i> Last Assessment</h3>
+                    <p>{% if assessments %}{{ assessments[0].date.strftime('%b %d, %Y') }}{% else %}—{% endif %}</p>
+                </div>
+            </div>
+            <h2 class="section-title">Quick Actions</h2>
+            <div class="quick-actions">
+                <div class="action-card">
+                    <h3><i class="fa-solid fa-stethoscope card-icon"></i> New Risk Assessment</h3>
+                    <p>Complete a comprehensive risk evaluation.</p>
+                    <a href="{{ url_for('assessment') }}" class="btn red-btn">Start Assessment</a>
+                </div>
+                <div class="action-card">
+                    <h3><i class="fa-solid fa-upload card-icon"></i> Upload Medical Document</h3>
+                    <p>Go to the assessment page to upload a document.</p>
+                    <a href="{{ url_for('assessment') }}" class="btn blue-btn">Upload</a>
+                </div>
+                <div class="action-card">
+                    <h3><i class="fa-solid fa-history card-icon"></i> View Full History</h3>
+                    <p>Access all your previous assessments and results.</p>
+                    <a href="{{ url_for('profile') }}" class="btn green-btn">View History</a>
+                </div>
+            </div>
+            {# --- RESTORED: Recent Activity Section --- #}
+            <h2 class="section-title">Recent Activity</h2>
+            <div class="recent">
+                <div class="view-all"><a href="{{ url_for('profile') }}">View All</a></div>
+                {% if assessments %}
+                <div class="recent-item">
+                    <div>
+                        <span class="recent-badge">{{ assessments[0].riskText }}</span>
+                        <span style="margin-left:10px;">Risk Level: {{ assessments[0].riskLevel }}%</span>
+                    </div>
+                    <a href="{{ url_for('result', assessment_id=assessments[0].id) }}" style="text-decoration: none; color: #333;">View Details</a>
+                </div>
+                {% else %}
+                <div class="recent-item">
+                    <p>No recent assessments. Complete one to see a summary here.</p>
+                </div>
+                {% endif %}
+            </div>
+            {# --- END OF RESTORED SECTION --- #}
+            <div class="health-tip">
+                <div class="icon"><i class="fa-solid fa-lightbulb"></i></div>
+                <div class="health-tip-content">
+                    <strong>Daily Heart Health Tip</strong>
+                    <p id="daily-tip-text">Loading tip...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='global.js') }}"></script>
+    <script>
+        // Splash Screen Animation - ADDED
+        document.addEventListener('DOMContentLoaded', function() {
+            const splashScreen = document.getElementById('splash-screen');
+            
+            // Hide splash screen after 3.5 seconds
+            setTimeout(() => {
+                splashScreen.classList.add('fade-out');
+                setTimeout(() => {
+                    splashScreen.style.display = 'none';
+                }, 800);
+            }, 3500);
+
+            // Original health tips code - UNCHANGED
+            const tips = [
+                "Stay hydrated! Drinking enough water helps your heart pump blood more easily.",
+                "Incorporate more fiber into your diet with foods like oats, beans, and apples.",
+                "Limit processed foods, which are often high in sodium and unhealthy fats.",
+                "Take short breaks to walk and stretch if you sit for long periods of time.",
+                "Managing stress is key. Try deep breathing exercises or meditation for a few minutes each day.",
+                "Aim for 7-8 hours of quality sleep per night for better heart health.",
+                "Eat a handful of unsalted nuts like almonds or walnuts as a heart-healthy snack."
+            ];
+            const now = new Date();
+            const startOfYear = new Date(now.getFullYear(), 0, 0);
+            const diff = now - startOfYear;
+            const oneDay = 1000 * 60 * 60 * 24;
+            const dayOfYear = Math.floor(diff / oneDay);
+            const tipIndex = dayOfYear % tips.length;
+            const dailyTipElement = document.getElementById('daily-tip-text');
+            if (dailyTipElement) {
+                dailyTipElement.textContent = tips[tipIndex];
+            }
+        });
+    </script>
+    <div class="chat-button" id="chat-button">
+    <i class="fa-solid fa-comment-dots"></i>
+</div>
+<div class="chat-window" id="chat-window">
+    <div class="chat-header">HeartShield Assistant</div>
+    <div class="chat-messages" id="chat-messages">
+        <div class="message bot">Hello! Ask me a question.</div>
+    </div>
+    <form class="chat-input-form" id="chat-form">
+        <input type="text" id="chat-input" placeholder="Type your message...">
+        <button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
+    </form>
+</div>
+</body>
+</html>
