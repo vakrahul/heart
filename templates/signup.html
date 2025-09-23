@@ -6,13 +6,44 @@
     <title>HeartShield - Create Account</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, createUserWithEmailAndPassword, updateProfile } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyD6-GQ2gr9R1TAjZR30VNyO86LLtSvcDnM",
+            authDomain: "heart-43ed1.firebaseapp.com",
+            projectId: "heart-43ed1",
+            storageBucket: "heart-43ed1.firebasestorage.app",
+            messagingSenderId: "496605621075",
+            appId: "1:496605621075:web:ba0bd0e508c71f9185cfa6"
+        };
+        console.log('Initializing Firebase...');
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        // Make functions available globally
+        window.firebaseAuth = auth;
+        window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+        window.updateProfile = updateProfile;
+    </script>
 </head>
 <body class="auth-page">
     <div class="auth-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
         <div class="logo">❤ HeartShield</div>
         <h2>Create Account</h2>
         <p>Join HeartShield to start monitoring your heart health</p>
-        <form method="POST" action="{{ url_for('signup') }}">
+
+        <form id="firebase-signup-form">
             <div class="form-group">
                 <label for="fullname">Full Name</label>
                 <input type="text" id="fullname" name="fullname" placeholder="Enter your full name" required>
@@ -26,13 +57,17 @@
                 <input type="password" id="password" name="password" placeholder="Create a password" required minlength="6">
                 <i class="fa-solid fa-eye toggle-password" onclick="togglePasswordVisibility('password')"></i>
             </div>
-            <button type="submit" class="btn">Create Account</button>
+            <button type="submit" class="btn" id="signup-btn">Create Account</button>
         </form>
+
         <div class="extra-links">
             Already have an account? <a href="{{ url_for('login') }}">Login Here</a>
         </div>
-    </div>
+
+        </div>
+
     <script>
+        // Password visibility toggle function
         function togglePasswordVisibility(fieldId) {
             const input = document.getElementById(fieldId);
             const icon = input.nextElementSibling;
@@ -46,19 +81,104 @@
                 icon.classList.add("fa-eye");
             }
         }
+
+        // Removed showTraditionalSignup()
+
+        // Firebase signup functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const firebaseForm = document.getElementById('firebase-signup-form');
+            const signupBtn = document.getElementById('signup-btn');
+
+            firebaseForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const fullName = document.getElementById('fullname').value.trim();
+                const email = document.getElementById('email').value.trim();
+                const password = document.getElementById('password').value;
+
+                if (!fullName || !email || !password) {
+                    alert('Please fill in all fields.');
+                    return;
+                }
+
+                // Disable button and show loading
+                signupBtn.disabled = true;
+                signupBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating Account...';
+
+                try {
+                    console.log('Creating Firebase user...');
+                    // Create user with Firebase
+                    const userCredential = await window.createUserWithEmailAndPassword(
+                        window.firebaseAuth, email, password
+                    );
+
+                    // Update user profile with display name
+                    await window.updateProfile(userCredential.user, { displayName: fullName });
+                    console.log('Firebase user created successfully');
+
+                    // Get ID token
+                    const idToken = await userCredential.user.getIdToken();
+
+                    // Send token AND user info to Flask backend
+                    const response = await fetch('/firebase-auth', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            idToken: idToken,
+                            authType: 'signup',
+                            userEmail: userCredential.user.email, // Send email explicitly
+                            displayName: fullName, // Send full name explicitly
+                            uid: userCredential.user.uid
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        console.log('Backend authentication successful');
+                        window.location.href = result.redirect;
+                    } else {
+                        throw new Error(result.message || 'Backend authentication failed');
+                    }
+
+                } catch (error) {
+                    console.error('Signup error:', error);
+                    let errorMessage = 'Failed to create account. ';
+                    switch (error.code) {
+                        case 'auth/email-already-in-use': errorMessage += 'An account with this email already exists.'; break;
+                        case 'auth/invalid-email': errorMessage += 'Invalid email address.'; break;
+                        case 'auth/weak-password': errorMessage += 'Password should be at least 6 characters.'; break;
+                        case 'auth/operation-not-allowed': errorMessage += 'Email signup is not enabled.'; break;
+                        default: errorMessage += error.message || 'Please try again.';
+                    }
+                    alert(errorMessage);
+                } finally {
+                    // Re-enable button
+                    signupBtn.disabled = false;
+                    signupBtn.innerHTML = 'Create Account';
+                }
+            });
+        });
     </script>
+    <style>
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .alert { padding: 10px; margin-bottom: 15px; border-radius: 4px; text-align: center; }
+        .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
     <div class="chat-button" id="chat-button">
-    <i class="fa-solid fa-comment-dots"></i>
-</div>
-<div class="chat-window" id="chat-window">
-    <div class="chat-header">HeartShield Assistant</div>
-    <div class="chat-messages" id="chat-messages">
-        <div class="message bot">Hello! Ask me a question.</div>
+        <i class="fa-solid fa-comment-dots"></i>
     </div>
-    <form class="chat-input-form" id="chat-form">
-        <input type="text" id="chat-input" placeholder="Type your message...">
-        <button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
-    </form>
-</div>
+    <div class="chat-window" id="chat-window">
+        <div class="chat-header">HeartShield Assistant</div>
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot">Hello! Ask me a question.</div>
+        </div>
+        <form class="chat-input-form" id="chat-form">
+            <input type="text" id="chat-input" placeholder="Type your message...">
+            <button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
+        </form>
+    </div>
 </body>
 </html>

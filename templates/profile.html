@@ -19,6 +19,45 @@
         .stat-label { font-size: 0.9rem; color: #777; }
         .upload-pic-form { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: left; }
         .nav-link { display: flex; align-items: center; gap: 8px; }
+        
+        /* Search and Filter Styles */
+        .search-filter-container { 
+            background: #fff; 
+            border-radius: 15px; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1); 
+            padding: 20px; 
+            margin-bottom: 20px; 
+        }
+        .search-input { 
+            border-radius: 25px; 
+            border: 2px solid #e63946; 
+            padding: 10px 20px; 
+        }
+        .search-input:focus { 
+            border-color: #e63946; 
+            box-shadow: 0 0 0 0.2rem rgba(230, 57, 70, 0.25); 
+        }
+        .filter-btn { 
+            border-radius: 20px; 
+            margin: 0 5px; 
+            transition: all 0.3s ease; 
+        }
+        .filter-btn.active { 
+            background-color: #e63946; 
+            border-color: #e63946; 
+            color: white; 
+        }
+        .assessment-card { 
+            transition: all 0.3s ease; 
+        }
+        .assessment-card.hidden { 
+            display: none !important; 
+        }
+        .no-results { 
+            text-align: center; 
+            padding: 40px; 
+            color: #777; 
+        }
     </style>
 </head>
 <body>
@@ -66,10 +105,34 @@
         </div>
 
         <h3 class="mt-5 text-center">Your Assessment History</h3>
+        
+        <!-- Search and Filter Section -->
+        <div class="search-filter-container">
+            <div class="row align-items-center">
+                <div class="col-md-6 mb-3 mb-md-0">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0" style="border-color: #e63946;">
+                            <i class="fa-solid fa-search text-danger"></i>
+                        </span>
+                        <input type="text" id="searchInput" class="form-control search-input border-start-0" placeholder="Search assessments by date or risk level...">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="text-md-end">
+                        <small class="text-muted me-2">Filter by risk:</small>
+                        <button class="btn btn-outline-danger btn-sm filter-btn active" data-filter="all">All</button>
+                        <button class="btn btn-outline-success btn-sm filter-btn" data-filter="low">Low Risk</button>
+                        <button class="btn btn-outline-warning btn-sm filter-btn" data-filter="medium">Medium Risk</button>
+                        <button class="btn btn-outline-danger btn-sm filter-btn" data-filter="high">High Risk</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="history-list" class="mt-3">
             {% if assessments %}
                 {% for assessment in assessments %}
-                <div class="card p-3 mb-3">
+                <div class="card p-3 mb-3 assessment-card" data-risk-level="{{ assessment.riskLevel }}" data-risk-text="{{ assessment.riskText|lower }}" data-date="{{ assessment.date.strftime('%B %d, %Y')|lower }}">
                     <div class="d-flex justify-content-between align-items-center">
                         <h6 class="mb-0">Assessment - {{ assessment.date.strftime('%B %d, %Y') }}</h6>
                         <span class="badge bg-danger rounded-pill">{{ assessment.riskText }}</span>
@@ -90,6 +153,13 @@
                     </div>
                 </div>
                 {% endfor %}
+                
+                <!-- No Results Message -->
+                <div id="no-results" class="card p-4 no-results" style="display: none;">
+                    <i class="fa-solid fa-search-minus text-muted mb-3" style="font-size: 3rem;"></i>
+                    <p class="text-muted mb-0">No assessments match your search or filter criteria.</p>
+                    <small class="text-muted">Try adjusting your search terms or filters.</small>
+                </div>
             {% else %}
                 <div class="card p-4 text-center">
                     <p class="text-muted mb-0">You have no assessment history yet.</p>
@@ -108,6 +178,77 @@
                 detailsDiv.style.display = "none";
             }
         }
+
+        // Search and Filter functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('searchInput');
+            const filterButtons = document.querySelectorAll('.filter-btn');
+            const assessmentCards = document.querySelectorAll('.assessment-card');
+            const noResultsDiv = document.getElementById('no-results');
+
+            let currentFilter = 'all';
+
+            // Search functionality
+            searchInput.addEventListener('input', function() {
+                filterAssessments();
+            });
+
+            // Filter functionality
+            filterButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // Remove active class from all buttons
+                    filterButtons.forEach(btn => btn.classList.remove('active'));
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    
+                    currentFilter = this.getAttribute('data-filter');
+                    filterAssessments();
+                });
+            });
+
+            function filterAssessments() {
+                const searchTerm = searchInput.value.toLowerCase();
+                let visibleCount = 0;
+
+                assessmentCards.forEach(card => {
+                    const riskLevel = parseInt(card.getAttribute('data-risk-level'));
+                    const riskText = card.getAttribute('data-risk-text');
+                    const dateText = card.getAttribute('data-date');
+                    
+                    // Determine risk category
+                    let riskCategory;
+                    if (riskLevel < 30) {
+                        riskCategory = 'low';
+                    } else if (riskLevel < 70) {
+                        riskCategory = 'medium';
+                    } else {
+                        riskCategory = 'high';
+                    }
+
+                    // Check if matches search term
+                    const matchesSearch = dateText.includes(searchTerm) || 
+                                        riskText.includes(searchTerm) || 
+                                        riskLevel.toString().includes(searchTerm);
+
+                    // Check if matches filter
+                    const matchesFilter = currentFilter === 'all' || riskCategory === currentFilter;
+
+                    if (matchesSearch && matchesFilter) {
+                        card.classList.remove('hidden');
+                        visibleCount++;
+                    } else {
+                        card.classList.add('hidden');
+                    }
+                });
+
+                // Show/hide no results message
+                if (visibleCount === 0 && assessmentCards.length > 0) {
+                    noResultsDiv.style.display = 'block';
+                } else {
+                    noResultsDiv.style.display = 'none';
+                }
+            }
+        });
     </script>
     <div class="chat-button" id="chat-button">
     <i class="fa-solid fa-comment-dots"></i>

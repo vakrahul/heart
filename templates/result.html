@@ -16,7 +16,7 @@
         }
         
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #ff3f3f 0%, #ffffff 100%);
             background-attachment: fixed;
             min-height: 100vh;
         }
@@ -263,6 +263,84 @@
         body.dark-mode .chat-window {
             background: rgba(45, 55, 72, 0.95);
         }
+
+        /* New styles for search and filter */
+        .search-filter-bar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+
+        body.dark-mode .search-filter-bar {
+            background: rgba(45, 55, 72, 0.95);
+        }
+
+        .search-input {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            padding: 12px 15px;
+            width: 100%;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+            border-color: #ef4444;
+        }
+
+        body.dark-mode .search-input {
+            background: rgba(74, 85, 104, 0.8);
+            color: #e2e8f0;
+        }
+
+        .filter-button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .filter-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .filter-button.active {
+            background: linear-gradient(45deg, #ef4444, #dc2626);
+        }
+
+        .download-button {
+            background: linear-gradient(45deg, #10b981, #059669);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .download-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+        }
+
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -294,6 +372,38 @@
                 <h1 class="text-5xl font-bold text-white mb-4 drop-shadow-lg">Risk Assessment Report</h1>
                 <p class="text-gray-200 text-lg">Generated on: {{ assessment.date.strftime('%B %d, %Y at %I:%M %p') }}</p>
             </div>
+
+            <!-- Search and Filter Bar -->
+            <div class="search-filter-bar animated-card" style="animation-delay: 50ms;">
+                <div class="flex flex-col md:flex-row gap-4 items-center">
+                    <div class="flex-1 min-w-0">
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            class="search-input" 
+                            placeholder="Search in report content..."
+                            onkeyup="searchReport()"
+                        >
+                    </div>
+                    <div class="flex gap-3">
+                        <button class="filter-button active" onclick="filterContent('all')" data-filter="all">
+                            <i class="fa-solid fa-list mr-2"></i>All
+                        </button>
+                        <button class="filter-button" onclick="filterContent('insights')" data-filter="insights">
+                            <i class="fa-solid fa-lightbulb mr-2"></i>Insights
+                        </button>
+                        <button class="filter-button" onclick="filterContent('risks')" data-filter="risks">
+                            <i class="fa-solid fa-triangle-exclamation mr-2"></i>Risks
+                        </button>
+                        <button class="filter-button" onclick="filterContent('recommendations')" data-filter="recommendations">
+                            <i class="fa-solid fa-shield-heart mr-2"></i>Tips
+                        </button>
+                        <button class="download-button" onclick="downloadReport()">
+                            <i class="fa-solid fa-download"></i>Download
+                        </button>
+                    </div>
+                </div>
+            </div>
             
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div class="lg:col-span-1 space-y-8">
@@ -313,7 +423,13 @@
                         <div class="space-y-2 text-sm text-gray-600">
                             {% for key, value in inputs.items() %}
                                 <p><strong>{{ key|replace('_', ' ')|capitalize }}:</strong> 
-                                    {% if key == 'male' %}{{ 'Female' if value == '0' else 'Male' }}{% elif key in ['currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes'] %}{{ 'No' if value == '0' else 'Yes' }}{% else %}{{ value }}{% endif %}
+                                    {% if key == 'male' %}
+                                        {{ 'Male' if value == '1' else 'Female' }}
+                                    {% elif key in ['currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes'] %}
+                                        {{ 'Yes' if value == '1' else 'No' }}
+                                    {% else %}
+                                        {{ value }}
+                                    {% endif %}
                                 </p>
                             {% endfor %}
                         </div>
@@ -321,12 +437,12 @@
                 </div>
                 
                 <div class="lg:col-span-2 space-y-8">
-                    <div class="glass-card p-8 rounded-xl shadow-xl animated-card" style="animation-delay: 300ms;">
+                    <div class="glass-card p-8 rounded-xl shadow-xl animated-card filter-content insights-content" style="animation-delay: 300ms;" data-content="insights">
                         <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fa-solid fa-lightbulb mr-3 text-yellow-500"></i>AI Health Insights</h2>
                         <p class="text-gray-700 text-lg leading-relaxed">{{ insights_text|safe }}</p>
                     </div>
                     
-                    <div class="glass-card p-6 rounded-xl shadow-xl animated-card" style="animation-delay: 400ms;">
+                    <div class="glass-card p-6 rounded-xl shadow-xl animated-card filter-content risks-content" style="animation-delay: 400ms;" data-content="risks">
                         <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fa-solid fa-triangle-exclamation mr-3 text-orange-500"></i>Risk Factors</h2>
                         <div class="space-y-4">
                             {% for factor in risk_factors %}
@@ -340,7 +456,7 @@
                         </div>
                     </div>
                     
-                    <div class="glass-card p-6 rounded-xl shadow-xl animated-card" style="animation-delay: 500ms;">
+                    <div class="glass-card p-6 rounded-xl shadow-xl animated-card filter-content recommendations-content" style="animation-delay: 500ms;" data-content="recommendations">
                         <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fa-solid fa-shield-heart mr-3 text-green-500"></i>Recommendations</h2>
                         <ul class="space-y-3 list-disc list-inside text-gray-700">
                             {% for precaution in precautions %}
@@ -460,6 +576,230 @@
         if (localStorage.getItem('darkMode') === 'true') {
             document.body.classList.add('dark-mode');
         }
+
+        // Search functionality
+        function searchReport() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const contentElements = document.querySelectorAll('.filter-content');
+            
+            contentElements.forEach(element => {
+                const text = element.textContent.toLowerCase();
+                if (searchTerm === '' || text.includes(searchTerm)) {
+                    element.style.display = 'block';
+                    // Highlight matching text
+                    if (searchTerm !== '') {
+                        highlightSearchTerm(element, searchTerm);
+                    } else {
+                        removeHighlights(element);
+                    }
+                } else {
+                    element.style.display = 'none';
+                }
+            });
+        }
+
+        function highlightSearchTerm(element, term) {
+            const walker = document.createTreeWalker(
+                element,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+            );
+
+            const textNodes = [];
+            let node;
+            while (node = walker.nextNode()) {
+                textNodes.push(node);
+            }
+
+            textNodes.forEach(textNode => {
+                const parent = textNode.parentNode;
+                if (parent.tagName !== 'SCRIPT' && parent.tagName !== 'STYLE') {
+                    const text = textNode.textContent;
+                    const regex = new RegExp(`(${term})`, 'gi');
+                    if (regex.test(text)) {
+                        const highlightedText = text.replace(regex, '<mark style="background-color: #fef08a; padding: 2px 4px; border-radius: 3px;">$1</mark>');
+                        const wrapper = document.createElement('span');
+                        wrapper.innerHTML = highlightedText;
+                        parent.replaceChild(wrapper, textNode);
+                    }
+                }
+            });
+        }
+
+        function removeHighlights(element) {
+            const marks = element.querySelectorAll('mark');
+            marks.forEach(mark => {
+                mark.outerHTML = mark.innerHTML;
+            });
+        }
+
+        // Filter functionality
+        function filterContent(filterType) {
+            const filterButtons = document.querySelectorAll('.filter-button');
+            const contentElements = document.querySelectorAll('.filter-content');
+            
+            // Update active button
+            filterButtons.forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+            
+            // Show/hide content
+            if (filterType === 'all') {
+                contentElements.forEach(element => {
+                    element.style.display = 'block';
+                });
+            } else {
+                contentElements.forEach(element => {
+                    if (element.classList.contains(`${filterType}-content`)) {
+                        element.style.display = 'block';
+                    } else {
+                        element.style.display = 'none';
+                    }
+                });
+            }
+            
+            // Clear search when filtering
+            document.getElementById('searchInput').value = '';
+            removeAllHighlights();
+        }
+
+        function removeAllHighlights() {
+            const marks = document.querySelectorAll('mark');
+            marks.forEach(mark => {
+                mark.outerHTML = mark.innerHTML;
+            });
+        }
+
+        // Download report functionality
+       // Download report functionality - Fixed to use actual assessment time
+function downloadReport() {
+    const reportContainer = document.getElementById('reportContainer').cloneNode(true);
+    
+    // Remove interactive elements (your existing code is good)
+    const searchBar = reportContainer.querySelector('.search-filter-bar');
+    if (searchBar) searchBar.remove();
+    const backButton = reportContainer.querySelector('.text-center:last-child');
+    if (backButton) backButton.remove();
+
+    // --- CHANGE IS HERE ---
+
+    // 1. Get the current date and time RIGHT NOW using JavaScript
+    const now = new Date();
+    const generatedOnDateText = now.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+
+    // For the filename, we can still use the original assessment date for clarity
+    const assessmentDate = new Date("{{ assessment.date.isoformat() }}");
+    const filenameDatePart = assessmentDate.toISOString().split('T')[0];
+
+    // Create printable HTML
+    const printableHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>HeartShield Risk Assessment Report</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .glass-card { border: 1px solid #ddd; border-radius: 10px; padding: 20px; margin: 20px 0; background: #f9f9f9; }
+            .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
+            .space-y-8 > * + * { margin-top: 20px; }
+            .text-center { text-align: center; }
+            .font-bold { font-weight: bold; }
+            .text-red-500 { color: #ef4444; }
+            .text-purple-600 { color: #9333ea; }
+            .text-yellow-500 { color: #eab308; }
+            .text-orange-500 { color: #f97316; }
+            .text-green-500 { color: #22c55e; }
+            .list-disc { list-style-type: disc; margin-left: 20px; }
+            @media print {
+                body { margin: 20px; }
+                .glass-card { break-inside: avoid; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1 style="color: #ef4444; font-size: 2.5em; margin-bottom: 10px;">
+                <i>♥</i> HeartShield Risk Assessment Report
+            </h1>
+            
+            <p>Generated on: ${generatedOnDateText}</p>
+
+        </div>
+        ${reportContainer.innerHTML}
+    </body>
+    </html>`;
+
+    // Create and download (your existing code is good)
+    const blob = new Blob([printableHTML], { type: 'text/html' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `HeartShield_Risk_Report_${filenameDatePart}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    
+    showNotification('Report downloaded successfully!', 'success');
+}
+
+        // Notification function
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#10b981' : '#3b82f6'};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+                font-weight: 600;
+                animation: slideIn 0.3s ease-out;
+            `;
+            notification.textContent = message;
+            
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+            `;
+            document.head.appendChild(style);
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+                style.remove();
+            }, 3000);
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Ctrl/Cmd + F for search
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                document.getElementById('searchInput').focus();
+            }
+            
+            // Ctrl/Cmd + D for download
+            if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+                e.preventDefault();
+                downloadReport();
+            }
+        });
     </script>
 </body>
 </html>

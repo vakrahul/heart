@@ -12,6 +12,19 @@ import joblib
 import numpy as np
 import easyocr
 import docx
+import firebase_admin
+from firebase_admin import credentials, auth
+
+# --- Firebase Setup ---
+try:
+    # Initialize Firebase Admin SDK
+    cred = credentials.Certificate("firebase-service-account-key.json") # Update this path
+    firebase_admin.initialize_app(cred)
+    print("Firebase Admin SDK initialized successfully.")
+    FIREBASE_ENABLED = True
+except Exception as e:
+    print(f"Warning: Firebase initialization failed: {e}")
+    FIREBASE_ENABLED = False
 
 # --- App Configuration & Extensions ---
 app = Flask(__name__)
@@ -23,6 +36,7 @@ app.config['UPLOAD_FOLDER'] = os.path.join(basedir, 'uploads')
 app.config['PIC_UPLOAD_FOLDER'] = os.path.join(basedir, 'static/profile_pics')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['PIC_UPLOAD_FOLDER'], exist_ok=True)
+
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
@@ -36,6 +50,7 @@ try:
 except FileNotFoundError:
     model, scaler = None, None
     print("WARNING: Model/scaler files not found.")
+
 try:
     reader = easyocr.Reader(['en'])
     print("EasyOCR reader initialized successfully.")
@@ -48,7 +63,8 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     fullName = db.Column(db.String(150), nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(60), nullable=False)
+    password = db.Column(db.String(60), nullable=True)  # Made nullable for Firebase users
+    firebase_uid = db.Column(db.String(128), unique=True, nullable=True)  # New field for Firebase UID
     image_file = db.Column(db.String(20), nullable=False, default='default.jpg')
     assessments = db.relationship('Assessment', backref='author', lazy=True)
 
@@ -66,6 +82,63 @@ class Assessment(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# --- Firebase Helper Functions ---
+def verify_firebase_token(id_token):
+    """Verify Firebase ID token and return decoded token"""
+    if not FIREBASE_ENABLED:
+        return None
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+        return decoded_token
+    except Exception as e:
+        print(f"Firebase token verification failed: {e}")
+        return None
+
+def get_or_create_user_from_firebase(decoded_token, display_name=None, user_email=None):
+    firebase_uid = decoded_token['uid']
+    email_from_token = decoded_token.get('email')
+
+    # Use user_email if provided, otherwise fallback to token's email
+    email_to_use = user_email if user_email else email_from_token
+
+    # Prioritize the display_name passed as a parameter
+    # If not provided, try from decoded_token, then fallback to email prefix
+    if not display_name:
+        display_name = decoded_token.get('name') or decoded_token.get('display_name')
+        if not display_name and email_to_use:
+            display_name = email_to_use.split('@')[0]
+    
+    # If display_name is still None after all attempts, set a generic fallback or the email itself
+    if not display_name:
+        display_name = email_to_use # Fallback to email if no name found anywhere
+
+    user = User.query.filter_by(firebase_uid=firebase_uid).first()
+
+    if not user:
+        # Check if user exists by email (for migration purposes, e.g., if they registered traditionally first)
+        user = User.query.filter_by(email=email_to_use).first()
+        if user:
+            # Update existing user with Firebase UID and the new display name
+            user.firebase_uid = firebase_uid
+            user.fullName = display_name # Always update with the best available display name
+            user.email = email_to_use # Ensure email is consistent
+        else:
+            # Create new user
+            user = User(
+                fullName=display_name,
+                email=email_to_use,
+                firebase_uid=firebase_uid,
+                password=None # No password needed for Firebase users
+            )
+            db.session.add(user)
+    else:
+        # User already exists by firebase_uid, ensure fullName and email are up-to-date
+        user.fullName = display_name
+        user.email = email_to_use # Update email in case it changed in Firebase
+    
+    db.session.commit()
+    return user
+
 def calculate_risk_with_model(inputs):
     if not model or not scaler:
         return {"riskLevel": 0, "riskText": "Model Not Loaded", "confidenceScore": 0}
@@ -81,10 +154,15 @@ def calculate_risk_with_model(inputs):
         prediction_proba = model.predict_proba(scaled_input)[0]
         risk_level = round(prediction_proba[1] * 100)
         confidence_score = round(max(prediction_proba) * 100, 1)
-        if risk_level > 75: risk_text = "Very High Risk"
-        elif risk_level > 50: risk_text = "High Risk"
-        elif risk_level > 25: risk_text = "Moderate Risk"
-        else: risk_text = "Low Risk"
+
+        if risk_level > 75:
+            risk_text = "Very High Risk"
+        elif risk_level > 50:
+            risk_text = "High Risk"
+        elif risk_level > 25:
+            risk_text = "Moderate Risk"
+        else:
+            risk_text = "Low Risk"
         return {"riskLevel": risk_level, "riskText": risk_text, "confidenceScore": confidence_score}
     except Exception as e:
         print(f"Prediction Error: {e}")
@@ -98,20 +176,29 @@ def init_db_command():
 
 def get_bot_response(user_message):
     user_message = user_message.lower()
-    if "symptom" in user_message: return "Common symptoms include chest pain and shortness of breath."
-    elif "precaution" in user_message: return "To lower risk: eat a balanced diet and exercise regularly."
-    else: return "Sorry, I can only answer about 'symptoms' or 'precautions'."
+    if "symptom" in user_message:
+        return "Common symptoms include chest pain and shortness of breath."
+    elif "precaution" in user_message:
+        return "To lower risk: eat a balanced diet and exercise regularly."
+    else:
+        return "Sorry, I can only answer about 'symptoms' or 'precautions'."
 
 def extract_values_from_text(text):
-    if not reader: return {}
+    if not reader:
+        return {}
     extracted_data = {}
     text = text.lower()
     patterns = {
-        'age': r"age[\s:]*(\d{1,3})", 'male': r"(?:sex|gender)[\s:]+(male|female|m|f)",
-        'education': r"(?:education|edu)[\s:]+(\d)", 'currentSmoker': r"(?:smoker|smoking)[\s:]+(yes|no)",
-        'cigsPerDay': r"(?:cigs per day|cigs/day)[\s:]+(\d+)", 'BPMeds': r"(?:bp meds|medication)[\s:]+(yes|no)",
-        'prevalentStroke': r"stroke[\s:]+(yes|no)", 'prevalentHyp': r"(?:hypertension|prevalent hyp)[\s:]+(yes|no)",
-        'diabetes': r"diabetes[\s:]+(yes|no)", 'totChol': r"(?:total cholesterol|chol)[\s\(\)a-z/]*[:\s]+(\d{2,3})",
+        'age': r"age[\s:]*(\d{1,3})",
+        'male': r"(?:sex|gender)[\s:]*(?:is\s+)?(?:.*?)?\b(male|female|m|f)\b",  # Improved pattern
+        'education': r"(?:education|edu)[\s:]+(\d)",
+        'currentSmoker': r"(?:smoker|smoking)[\s:]+(yes|no)",
+        'cigsPerDay': r"(?:cigs per day|cigs/day)[\s:]+(\d+)",
+        'BPMeds': r"(?:bp meds|medication)[\s:]+(yes|no)",
+        'prevalentStroke': r"stroke[\s:]+(yes|no)",
+        'prevalentHyp': r"(?:hypertension|prevalent hyp)[\s:]+(yes|no)",
+        'diabetes': r"diabetes[\s:]+(yes|no)",
+        'totChol': r"(?:total cholesterol|chol)[\s\(\)a-z/]*[:\s]+(\d{2,3})",
         'sysBP': r"(?:systolic bp|sys bp)[\s\(\)a-z/]*[:\s]+(\d{2,3})",
         'diaBP': r"(?:diastolic bp|dia bp)[\s\(\)a-z/]*[:\s]+(\d{2,3})",
         'BMI': r"(?:bmi|body mass index)[\s\(\)]*[:\s]+([\d]+\.?[\d]*)",
@@ -121,21 +208,74 @@ def extract_values_from_text(text):
     for key, pattern in patterns.items():
         match = re.search(pattern, text)
         if match:
-            value = match.group(1)
-            
-            # --- CORRECTED LOGIC for Sex/Gender ---
-            if key == 'male':
-                # This now correctly checks for 'female' or 'f' first.
-                extracted_data[key] = '0' if 'female' in value or value.strip() == 'f' else '1'
-            # --- END OF FIX ---
-            
+            value = match.group(1).strip().lower()
+            # Fixed logic for Sex/Gender
+            if key == 'male': # Convert to male field: 1 for male, 0 for female
+                if value in ['male', 'm']:
+                    extracted_data[key] = '1'
+                elif value in ['female', 'f']:
+                    extracted_data[key] = '0'
+                # If unclear, don't set the value
             elif key in ['currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes']:
                 extracted_data[key] = '1' if 'yes' in value else '0'
             else:
                 extracted_data[key] = value
     return extracted_data
 
-# --- Routes ---
+# --- New Firebase Authentication Routes ---
+@app.route('/firebase-auth', methods=['POST'])
+def firebase_auth():
+    """Handle Firebase authentication"""
+    try:
+        data = request.get_json()
+        id_token = data.get('idToken')
+        auth_type = data.get('authType', 'login')  # 'login' or 'signup'
+        user_email = data.get('userEmail') # Explicitly passed from frontend
+        display_name = data.get('displayName') # Explicitly passed from frontend
+        firebase_uid = data.get('uid')
+
+        if not id_token:
+            return jsonify({"success": False, "message": "No ID token provided"}), 400
+
+        # Verify Firebase token
+        decoded_token = verify_firebase_token(id_token)
+        if not decoded_token:
+            return jsonify({"success": False, "message": "Invalid token"}), 401
+
+        # Use the provided display_name and user_email from the frontend
+        # Fallback to decoded_token if not present (though frontend should provide them)
+        final_display_name = display_name if display_name else decoded_token.get('name') or decoded_token.get('display_name')
+        final_user_email = user_email if user_email else decoded_token.get('email')
+
+        if not final_display_name and final_user_email:
+            final_display_name = final_user_email.split('@')[0]
+
+        if not final_user_email: # Should not happen if Firebase token is valid
+            return jsonify({"success": False, "message": "User email not found in token or request."}), 400
+
+        user = get_or_create_user_from_firebase(
+            decoded_token,
+            display_name=final_display_name,
+            user_email=final_user_email
+        )
+
+        # Log in the user using Flask-Login
+        login_user(user, remember=True)
+
+        # Set session flag for welcome animation if it's a signup
+        if auth_type == 'signup':
+            session['show_welcome_animation'] = True
+
+        return jsonify({
+            "success": True,
+            "message": f"Welcome back, {user.fullName}!",
+            "redirect": url_for('dashboard')
+        })
+    except Exception as e:
+        print(f"Firebase auth error: {e}")
+        return jsonify({"success": False, "message": "Authentication failed"}), 500
+
+# --- Routes (keeping original routes unchanged, removing traditional signup/login handling) ---
 @app.route('/chat', methods=['POST'])
 def chat():
     user_message = request.json.get('message')
@@ -145,10 +285,13 @@ def chat():
 @app.route('/ocr-process', methods=['POST'])
 @login_required
 def ocr_process():
-    if not reader: return jsonify({"error": "OCR system not available"}), 500
-    if 'file' not in request.files: return jsonify({"error": "No file part"}), 400
+    if not reader:
+        return jsonify({"error": "OCR system not available"}), 500
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
     file = request.files['file']
-    if file.filename == '': return jsonify({"error": "No selected file"}), 400
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(file.filename))
     file.save(filepath)
     text = ''
@@ -163,36 +306,27 @@ def ocr_process():
         print(f"OCR Error: {e}")
         return jsonify({"error": "Failed to process file"}), 500
     finally:
-        if os.path.exists(filepath): os.remove(filepath)
+        if os.path.exists(filepath):
+            os.remove(filepath)
     extracted_data = extract_values_from_text(text)
     return jsonify(extracted_data)
 
 @app.route('/')
-def home(): return render_template('home.html')
+def home():
+    return render_template('home.html')
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
-    if current_user.is_authenticated: return redirect(url_for('dashboard'))
-    if request.method == 'POST':
-        hashed_password = bcrypt.generate_password_hash(request.form.get('password')).decode('utf-8')
-        user = User(fullName=request.form.get('fullname'), email=request.form.get('email'), password=hashed_password)
-        db.session.add(user)
-        db.session.commit()
-        flash('Account created! You can now log in.', 'success')
-        session['show_welcome_animation'] = True
-        return redirect(url_for('login'))
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    # Removed traditional POST handling, all signup goes via firebase-auth endpoint
     return render_template('signup.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated: return redirect(url_for('dashboard'))
-    if request.method == 'POST':
-        user = User.query.filter_by(email=request.form.get('email')).first()
-        if user and bcrypt.check_password_hash(user.password, request.form.get('password')):
-            login_user(user, remember=True)
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Login Unsuccessful. Please check email and password.', 'danger')
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    # Removed traditional POST handling, all login goes via firebase-auth endpoint
     return render_template('login.html')
 
 @app.route('/logout')
@@ -213,7 +347,8 @@ def dashboard():
 
 @app.route('/assessment')
 @login_required
-def assessment(): return render_template('assessment.html')
+def assessment():
+    return render_template('assessment.html')
 
 @app.route('/analyze', methods=['POST'])
 @login_required
@@ -221,8 +356,10 @@ def analyze():
     inputs = {key: request.form.get(key) for key in request.form}
     result = calculate_risk_with_model(inputs)
     new_assessment = Assessment(
-        riskLevel=result['riskLevel'], riskText=result['riskText'],
-        confidenceScore=result['confidenceScore'], inputs=json.dumps(inputs), 
+        riskLevel=result['riskLevel'],
+        riskText=result['riskText'],
+        confidenceScore=result['confidenceScore'],
+        inputs=json.dumps(inputs),
         author=current_user
     )
     db.session.add(new_assessment)
@@ -233,13 +370,15 @@ def analyze():
 @login_required
 def result(assessment_id):
     assessment = Assessment.query.get_or_404(assessment_id)
-    if assessment.author != current_user: return redirect(url_for('dashboard'))
+    if assessment.author != current_user:
+        return redirect(url_for('dashboard'))
     inputs = json.loads(assessment.inputs)
     risk_factors, precautions, insights_text = [], [], ""
     if assessment.riskLevel > 50:
         insights_text = "Your result suggests a **high probability** of heart disease."
         precautions.append('**Schedule an appointment** with your doctor.')
-        if float(inputs.get('sysBP', 0)) > 140: risk_factors.append({'title': 'High Blood Pressure', 'description': f"BP of {inputs.get('sysBP')} mmHg is elevated."})
+        if float(inputs.get('sysBP', 0)) > 140:
+            risk_factors.append({'title': 'High Blood Pressure', 'description': f"BP of {inputs.get('sysBP')} mmHg is elevated."})
     else:
         insights_text = "Your result indicates a **low probability** of heart disease."
         precautions.append('**Continue with your healthy lifestyle** and regular check-ups.')
@@ -266,9 +405,15 @@ def update_profile_pic():
             if current_user.image_file != 'default.jpg':
                 try:
                     os.remove(os.path.join(app.config['PIC_UPLOAD_FOLDER'], current_user.image_file))
-                except OSError: pass
+                except OSError:
+                    pass
             file.save(picture_path)
             current_user.image_file = picture_fn
             db.session.commit()
             flash('Your profile picture has been updated!', 'success')
     return redirect(url_for('profile'))
+
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)

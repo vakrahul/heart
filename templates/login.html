@@ -7,10 +7,33 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+        // Your Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyD6-GQ2gr9R1TAjZR30VNyO86LLtSvcDnM",
+            authDomain: "heart-43ed1.firebaseapp.com",
+            projectId: "heart-43ed1",
+            storageBucket: "heart-43ed1.firebasestorage.app",
+            messagingSenderId: "496605621075",
+            appId: "1:496605621075:web:ba0bd0e508c71f9185cfa6"
+        };
+
+        // Add console logging for debugging
+        console.log('Initializing Firebase...');
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        // Make auth available globally
+        window.firebaseAuth = auth;
+        window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.sendPasswordResetEmail = sendPasswordResetEmail;
+    </script>
 </head>
 <body class="auth-page">
     <div class="auth-container">
-
         {# --- THIS BLOCK IS NEEDED TO SHOW ERROR MESSAGES FROM FLASK --- #}
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -22,8 +45,8 @@
         {# --- END OF MESSAGE BLOCK --- #}
 
         <div class="logo">❤ HeartShield Login</div>
-        
-        <form method="POST" action="{{ url_for('login') }}">
+
+        <form id="firebase-login-form">
             <div class="form-group">
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" placeholder="Enter your email" required>
@@ -33,17 +56,36 @@
                 <input type="password" id="password" name="password" placeholder="Enter your password" required>
                 <i class="fa-solid fa-eye toggle-password" onclick="togglePasswordVisibility('password')"></i>
             </div>
-            <button type="submit" class="btn">Sign In</button>
+            <button type="submit" class="btn" id="login-btn">Sign In</button>
         </form>
-        
+
         <div class="extra-links">
             <p>Don't have an account? <a href="{{ url_for('signup') }}">Register Here</a></p>
+            <p><a href="#" onclick="showResetPassword()">Forgot your password?</a></p>
+        </div>
+
+        </div>
+
+    <div id="resetPasswordModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Reset Password</h3>
+                <span class="close" onclick="hideResetPassword()">&times;</span>
+            </div>
+            <form id="resetPasswordForm">
+                <div class="form-group">
+                    <label for="reset-email">Email Address</label>
+                    <input type="email" id="reset-email" name="reset_email" placeholder="Enter your email address" required>
+                </div>
+                <button type="submit" class="btn reset-btn" id="resetBtn">Send Reset Link</button>
+            </form>
+            <p class="reset-info">We'll send you a link to reset your password.</p>
         </div>
     </div>
 
     <script src="{{ url_for('static', filename='global.js') }}"></script>
     <script>
-        // This script just toggles the password visibility
+        // Password visibility toggle function
         function togglePasswordVisibility(fieldId) {
             const input = document.getElementById(fieldId);
             const icon = input.nextElementSibling;
@@ -57,19 +99,369 @@
                 icon.classList.add("fa-eye");
             }
         }
+
+        // Removed showTraditionalLogin()
+
+        // Reset password modal functions
+        function showResetPassword() {
+            document.getElementById('resetPasswordModal').style.display = 'block';
+        }
+
+        function hideResetPassword() {
+            document.getElementById('resetPasswordModal').style.display = 'none';
+            document.getElementById('reset-email').value = '';
+        }
+
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('resetPasswordModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // Get elements for Firebase forms
+        const firebaseForm = document.getElementById('firebase-login-form');
+        const loginBtn = document.getElementById('login-btn');
+        const resetForm = document.getElementById('resetPasswordForm');
+        const resetBtn = document.getElementById('resetBtn');
+
+
+        // Firebase login form handler
+        firebaseForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                alert('Please fill in all fields.');
+                return;
+            }
+
+            // Disable button and show loading
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Signing In...';
+
+            try {
+                console.log('Attempting Firebase login...');
+                // Sign in with Firebase
+                const userCredential = await window.signInWithEmailAndPassword(
+                    window.firebaseAuth, email, password
+                );
+                console.log('Firebase login successful');
+
+                // Get ID token
+                const idToken = await userCredential.user.getIdToken();
+
+                // Get user information
+                const user = userCredential.user;
+                let userDisplayName = user.displayName;
+                if (!userDisplayName && user.email) {
+                    userDisplayName = user.email.split('@')[0]; // Use email prefix as a fallback name
+                }
+
+                // Send token AND user info to Flask backend
+                const response = await fetch('/firebase-auth', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        idToken: idToken,
+                        authType: 'login',
+                        userEmail: user.email,
+                        displayName: userDisplayName, // This contains the user's actual name
+                        uid: user.uid
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    console.log('Backend authentication successful');
+                    window.location.href = result.redirect;
+                } else {
+                    throw new Error(result.message || 'Backend authentication failed');
+                }
+
+            } catch (error) {
+                console.error('Login error:', error);
+                let errorMessage = 'Login failed. ';
+                switch (error.code) {
+                    case 'auth/user-not-found': errorMessage += 'No account found with this email.'; break;
+                    case 'auth/wrong-password': errorMessage += 'Incorrect password.'; break;
+                    case 'auth/invalid-email': errorMessage += 'Invalid email address.'; break;
+                    case 'auth/user-disabled': errorMessage += 'This account has been disabled.'; break;
+                    case 'auth/too-many-requests': errorMessage += 'Too many failed attempts. Please try again later.'; break;
+                    default: errorMessage += error.message || 'Please try again.';
+                }
+                alert(errorMessage);
+            } finally {
+                // Re-enable button
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = 'Sign In';
+            }
+        });
+
+        // Firebase password reset form handler
+        resetForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('reset-email').value.trim();
+
+            if (!email) {
+                alert('Please enter your email address.');
+                return;
+            }
+
+            // Disable button and show loading
+            resetBtn.disabled = true;
+            resetBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+
+            try {
+                console.log('Attempting to send password reset email to:', email);
+                await window.sendPasswordResetEmail(window.firebaseAuth, email);
+                console.log('Password reset email sent successfully');
+                alert('Password reset email sent! Check your inbox and spam folder.');
+                hideResetPassword();
+            } catch (error) {
+                console.error('Password reset error:', error);
+                console.error('Error code:', error.code);
+                console.error('Error message:', error.message);
+                let errorMessage = 'Failed to send reset email. ';
+                switch (error.code) {
+                    case 'auth/user-not-found': errorMessage += 'No account found with this email address.'; break;
+                    case 'auth/invalid-email': errorMessage += 'Invalid email address.'; break;
+                    case 'auth/too-many-requests': errorMessage += 'Too many requests. Please try again later.'; break;
+                    case 'auth/configuration-not-found': errorMessage += 'Firebase configuration error. Please contact support.'; break;
+                    default: errorMessage += `Error: ${error.message}`;
+                }
+                alert(errorMessage);
+            } finally {
+                // Re-enable button
+                resetBtn.disabled = false;
+                resetBtn.innerHTML = 'Send Reset Link';
+            }
+        });
     </script>
+    <style>
+        /* Modal styles for reset password - White and Red Theme */
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(220, 53, 69, 0.3); /* Light red overlay */
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #ffffff 0%, #ffeaea 100%);
+            margin: 10% auto;
+            padding: 0;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 420px;
+            box-shadow: 0 15px 35px rgba(220, 53, 69, 0.2);
+            border: 2px solid #dc3545;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            padding: 25px;
+            border-bottom: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: white;
+            font-weight: 600;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+        }
+
+        .modal-header h3::before {
+            content: '🔒';
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+
+        .close {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            padding: 5px;
+            border-radius: 50%;
+        }
+
+        .close:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: scale(1.1);
+        }
+
+        .modal form {
+            padding: 25px;
+        }
+
+        .modal .form-group {
+            margin-bottom: 20px;
+        }
+
+        .modal .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #dc3545;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .modal .form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #ffccd5;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background-color: #ffffff;
+            color: #333;
+            box-sizing: border-box;
+        }
+
+        .modal .form-group input:focus {
+            outline: none;
+            border-color: #dc3545;
+            box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+            background-color: #fef9f9;
+        }
+
+        .modal .form-group input::placeholder {
+            color: #999;
+        }
+
+        .reset-btn {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+            color: white !important;
+            border: none !important;
+            padding: 12px 25px !important;
+            border-radius: 8px !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            width: 100% !important;
+            transition: all 0.3s ease !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 8px !important;
+        }
+
+        .reset-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, #c82333 0%, #a71e2a 100%) !important;
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3) !important;
+        }
+
+        .reset-btn:active {
+            transform: translateY(0) !important;
+        }
+
+        .reset-btn:disabled {
+            opacity: 0.7 !important;
+            cursor: not-allowed !important;
+            transform: none !important;
+        }
+
+        .reset-info {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin: 15px 25px 25px;
+            padding: 15px;
+            background-color: rgba(220, 53, 69, 0.05);
+            border-radius: 8px;
+            border-left: 4px solid #dc3545;
+        }
+
+        .reset-info::before {
+            content: '💡';
+            margin-right: 8px;
+        }
+
+        /* Extra links styling */
+        .extra-links p {
+            margin: 10px 0;
+        }
+
+        .extra-links a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .extra-links a:hover {
+            text-decoration: underline;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .alert {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* Animation for modal appearance */
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .modal[style*="block"] .modal-content {
+            animation: modalSlideIn 0.3s ease-out;
+        }
+    </style>
     <div class="chat-button" id="chat-button">
-    <i class="fa-solid fa-comment-dots"></i>
-</div>
-<div class="chat-window" id="chat-window">
-    <div class="chat-header">HeartShield Assistant</div>
-    <div class="chat-messages" id="chat-messages">
-        <div class="message bot">Hello! Ask me a question.</div>
+        <i class="fa-solid fa-comment-dots"></i>
     </div>
-    <form class="chat-input-form" id="chat-form">
-        <input type="text" id="chat-input" placeholder="Type your message...">
-        <button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
-    </form>
-</div>
+    <div class="chat-window" id="chat-window">
+        <div class="chat-header">HeartShield Assistant</div>
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot">Hello! Ask me a question.</div>
+        </div>
+        <form class="chat-input-form" id="chat-form">
+            <input type="text" id="chat-input" placeholder="Type your message...">
+            <button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
+        </form>
+    </div>
 </body>
 </html>
